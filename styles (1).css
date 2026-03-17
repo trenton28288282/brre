@@ -9,15 +9,21 @@
   --glass: rgba(0,0,0,0.04);
 }
 
-*{box-sizing:border-box}
+{box-sizing:border-box}
+img{
+  max-width:100%;
+  height:auto;
+  display:block;
+}
 html,body{height:100%}
+
 body{
   margin:0;
   display:flex;
   align-items:center;
   justify-content:center;
   /* photographic background using provided asset */
-  background-image: url('/IMG_1204.jpeg');
+  background-image: url('Images/IMG_1204.jpeg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
