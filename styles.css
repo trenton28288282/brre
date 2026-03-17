@@ -317,7 +317,7 @@ button:active, .image-btn:active{ transform:translateY(0); }
 /* responsive tweaks */
 @media (max-width:420px){
   .card{padding:18px; border-radius:12px; min-height:300px}
-  .logo-wrap{width:48px;height:48px;top:10px;right:10px}
+  padding:140px 20px 28px;
   .top-banner{top:8px;left:50%}
 }
 
