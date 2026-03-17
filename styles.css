@@ -501,4 +501,15 @@ button:active, .image-btn:active{ transform:translateY(0); }
   opacity:1;
   transform:translateX(-50%) translateY(-6px);
   pointer-events:auto;
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.logo {
+  width: 120px;
+}
+
+.btn-img {
+  width: 40px;
 }
