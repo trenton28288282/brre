@@ -191,7 +191,8 @@ function setupRoll(){
             rewardResult.textContent = 'SIRIUS';
             rewardResult.classList.remove('reward-spike','empty');
             rewardResult.classList.add('reward-sirius');
-            resultImage.src = 'Images/IMG_1181.jpeg';
+            // CORRECTED: Sirius image
+            resultImage.src = 'Images/IMG_1187.jpeg';
             resultImage.alt = 'Sirius';
             resultImage.classList.remove('hidden');
             resultLabel.textContent = 'SIRIUS';
@@ -218,9 +219,15 @@ function setupRoll(){
           // store cooldown and start countdown only for non-guest users
           const now = Date.now();
           if (!isGuest){
+            // persist last roll ts
             setLastRollTs(userId, now);
             const nextAllowed = now + COOLDOWN_MS;
-            updateCooldownUI(nextAllowed - Date.now());
+
+            // explicitly set cooldown UI immediately so "Rolling" doesn't remain
+            rollBtn.disabled = true;
+            setRollLabel('Cooldown ' + formatRemaining(nextAllowed - Date.now()));
+
+            // start the interval to update countdown display
             startCooldownInterval(nextAllowed);
           } else {
             // guests: re-enable immediately but keep claim available
