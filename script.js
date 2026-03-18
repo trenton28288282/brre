@@ -144,6 +144,8 @@ function setupRoll(){
   // ensure claim button hidden initially
   if (claimBtn) claimBtn.classList.add('hidden');
 
+  // Simplified roll click handler: no progress bar/dots — just a brief simulated delay,
+  // then show result and set cooldown text for non-guests.
   rollBtn.addEventListener('click', ()=> {
     try {
       // hide claim message and button while rolling
@@ -164,78 +166,62 @@ function setupRoll(){
         }
       }
 
-      // Begin roll animation and lock UI (guests can still see the animation)
+      // disable button immediately and show temporary feedback
       rollBtn.disabled = true;
-      let elapsed = 0;
-      const total = 5000;
-      const tick = 300;
-      setRollLabel('Rolling');
-      // visual micro-reset
-      rewardResult.textContent = '';
-      rewardResult.classList.remove('reward-sirius','reward-spike','empty');
-      resultImage.classList.add('hidden');
-      resultImage.src = '';
-      resultLabel.classList.add('hidden');
-      resultLabel.textContent = '';
-      resultLabel.classList.remove('label-sirius','label-spike');
+      setRollLabel('Rolling...');
 
-      const spinner = setInterval(()=>{
-        const dots = '.'.repeat(((elapsed / tick) | 0) % 4);
-        setRollLabel('Rolling' + dots);
-        elapsed += tick;
-        if (elapsed >= total){
-          clearInterval(spinner);
-          const pick = Math.random() < 0.5 ? 'sirius' : 'spike';
+      // simulate short delay then reveal the result
+      setTimeout(()=>{
+        const pick = Math.random() < 0.5 ? 'sirius' : 'spike';
 
-          if (pick === 'sirius'){
-            rewardResult.textContent = 'SIRIUS';
-            rewardResult.classList.remove('reward-spike','empty');
-            rewardResult.classList.add('reward-sirius');
-            // CORRECTED: Sirius image
-            resultImage.src = 'Images/IMG_1187.jpeg';
-            resultImage.alt = 'Sirius';
-            resultImage.classList.remove('hidden');
-            resultLabel.textContent = 'SIRIUS';
-            resultLabel.classList.remove('hidden');
-            resultLabel.classList.add('label-sirius');
-          } else {
-            rewardResult.textContent = 'SPIKE';
-            rewardResult.classList.remove('reward-sirius','empty');
-            rewardResult.classList.add('reward-spike');
-            resultImage.src = 'Images/IMG_1186.jpeg';
-            resultImage.alt = 'Spike';
-            resultImage.classList.remove('hidden');
-            resultLabel.textContent = 'SPIKE';
-            resultLabel.classList.remove('hidden');
-            resultLabel.classList.add('label-spike');
-          }
-
-          // show claim button after roll
-          if (claimBtn){
-            claimBtn.classList.remove('hidden');
-            claimBtn.disabled = false;
-          }
-
-          // store cooldown and start countdown only for non-guest users
-          const now = Date.now();
-          if (!isGuest){
-            // persist last roll ts
-            setLastRollTs(userId, now);
-            const nextAllowed = now + COOLDOWN_MS;
-
-            // explicitly set cooldown UI immediately so "Rolling" doesn't remain
-            rollBtn.disabled = true;
-            setRollLabel('Cooldown ' + formatRemaining(nextAllowed - Date.now()));
-
-            // start the interval to update countdown display
-            startCooldownInterval(nextAllowed);
-          } else {
-            // guests: re-enable immediately but keep claim available
-            rollBtn.disabled = false;
-            setRollLabel('Roll');
-          }
+        if (pick === 'sirius'){
+          rewardResult.textContent = 'SIRIUS';
+          rewardResult.classList.remove('reward-spike','empty');
+          rewardResult.classList.add('reward-sirius');
+          // CORRECTED: Sirius image
+          resultImage.src = 'Images/IMG_1187.jpeg';
+          resultImage.alt = 'Sirius';
+          resultImage.classList.remove('hidden');
+          resultLabel.textContent = 'SIRIUS';
+          resultLabel.classList.remove('hidden');
+          resultLabel.classList.add('label-sirius');
+        } else {
+          rewardResult.textContent = 'SPIKE';
+          rewardResult.classList.remove('reward-sirius','empty');
+          rewardResult.classList.add('reward-spike');
+          resultImage.src = 'Images/IMG_1186.jpeg';
+          resultImage.alt = 'Spike';
+          resultImage.classList.remove('hidden');
+          resultLabel.textContent = 'SPIKE';
+          resultLabel.classList.remove('hidden');
+          resultLabel.classList.add('label-spike');
         }
-      }, tick);
+
+        // show claim button after roll
+        if (claimBtn){
+          claimBtn.classList.remove('hidden');
+          claimBtn.disabled = false;
+        }
+
+        // store cooldown and start countdown only for non-guest users
+        const now = Date.now();
+        if (!isGuest){
+          // persist last roll ts
+          setLastRollTs(userId, now);
+          const nextAllowed = now + COOLDOWN_MS;
+
+          // explicitly set cooldown UI immediately
+          rollBtn.disabled = true;
+          setRollLabel('Cooldown ' + formatRemaining(nextAllowed - Date.now()));
+
+          // start the interval to update countdown display
+          startCooldownInterval(nextAllowed);
+        } else {
+          // guests: re-enable immediately
+          rollBtn.disabled = false;
+          setRollLabel('Roll');
+        }
+      }, 800); // short UX delay so the user sees a transition
     } catch (err) {
       console.error('Error during roll click handler', err);
       // re-enable so user can try again
